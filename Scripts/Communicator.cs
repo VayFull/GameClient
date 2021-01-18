@@ -1,50 +1,159 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using UnityEngine;
 
-public class Communicator : MonoBehaviour
+namespace GameClient.Scripts
 {
-    private UdpClient _udpClient;
-    private IPEndPoint _serverEndpoint;
-    public int Id;
-    
-    void Start()
+    public class Communicator : MonoBehaviour
     {
-        _udpClient = new UdpClient();
-    }
-    
-    public void JoinServer(string hostname, int port)
-    {
-        _serverEndpoint = new IPEndPoint(IPAddress.Parse(hostname), port);
-        _udpClient.Connect(hostname, port);
-        _udpClient.BeginReceive(ReceiveCallback, null);
-        
-        SendHelloPackage();
-    }
+        private UdpClient _udpClient;
+        private IPEndPoint _serverEndpoint;
+        public int Id;
+        public GameObject Menu;
+        public GameObject Player;
+        public GameObject OtherPlayer;
+        private bool _isConnected = false;
+        private bool _createNewPlayer = false;
+        private bool _isChangedPosition = false;
+        private KeyValuePair<int, Vector3> _changedPositionKeyValue;
+        private int _newIdInt = 0;
+        private Dictionary<int, GameObject> playerDictionary = new Dictionary<int, GameObject>();
+        private Dictionary<int, Vector3> positionDictionary = new Dictionary<int, Vector3>();
+        private int _needToChangeId = 0;
 
-    private void ReceiveCallback(IAsyncResult ar)
-    {
-        var receivedBytes = _udpClient.EndReceive(ar, ref _serverEndpoint);
-        var result = Encoding.ASCII.GetString(receivedBytes);
-        if (result.StartsWith("id:"))
+        void Start()
         {
-            var resultParts = result.Split(':');
-            Id = Int32.Parse(resultParts[1]);
+            _udpClient = new UdpClient();
         }
-        Debug.Log(result);
-        _udpClient.BeginReceive(ReceiveCallback, null);
-    }
 
-    public void SendHelloPackage()
-    {
-        var bytes = Encoding.ASCII.GetBytes("hello");
-        _udpClient.BeginSend(bytes, bytes.Length, SendCallback, null);
-    }
+        private void Update()
+        {
+            if (_isConnected)
+            {
+                Debug.Log("ya dibigl!");
+                Menu.SetActive(false);
+                Instantiate(Player, new Vector3(0, 2, 0), Quaternion.identity);
+                _isConnected = false;
 
-    private void SendCallback(IAsyncResult ar)
-    {
-        _udpClient.EndSend(ar);
+                foreach (var otherPlayer in positionDictionary)
+                {
+                    var otherPlayerObject = Instantiate(OtherPlayer, otherPlayer.Value, Quaternion.identity);
+                    playerDictionary[otherPlayer.Key] = otherPlayerObject;
+                }
+                positionDictionary.Clear();
+            }
+
+            if (_createNewPlayer)
+            {
+                var newPlayer = Instantiate(OtherPlayer, new Vector3(0, 2, 0), Quaternion.identity);
+                playerDictionary[_newIdInt] = newPlayer;
+                _createNewPlayer = false;
+                _newIdInt = 0;
+            }
+
+            if (_isChangedPosition)
+            {
+                var changedObject = playerDictionary[_changedPositionKeyValue.Key];
+                changedObject.transform.position = _changedPositionKeyValue.Value;
+                playerDictionary[_needToChangeId].transform.position = _changedPositionKeyValue.Value;
+                _isChangedPosition = false;
+            }
+        }
+
+        public void JoinServer(string hostname, int port)
+        {
+            _serverEndpoint = new IPEndPoint(IPAddress.Parse(hostname), port);
+            _udpClient.Connect(hostname, port);
+            _udpClient.BeginReceive(ReceiveCallback, null);
+
+            SendHelloPackage();
+        }
+
+        private void ReceiveCallback(IAsyncResult ar)
+        {
+            var receivedBytes = _udpClient.EndReceive(ar, ref _serverEndpoint);
+            var result = Encoding.ASCII.GetString(receivedBytes);
+            Debug.Log(result);
+            if (result.StartsWith("id="))
+            {
+                var resultParts = result.Split('*');
+                var newClientId = resultParts[0].Split('=')[1];
+                Debug.Log(result);
+                if (!result.EndsWith("*"))
+                {
+                    var otherClients = resultParts[1];
+                    if (otherClients.Contains("&"))
+                    {
+                        var clientPositions = resultParts[1].Split('&');
+
+                        foreach (var clientPosition in clientPositions)
+                        {
+                            var dividedClientPosition = clientPosition.Split('?');
+                            var otherPlayerPositions = dividedClientPosition[1].Split(':');
+                            var otherPlayerPosition = new Vector3(float.Parse(otherPlayerPositions[0]),
+                                float.Parse(otherPlayerPositions[1]), float.Parse(otherPlayerPositions[2]));
+                            var otherPlayer = Instantiate(OtherPlayer, otherPlayerPosition, Quaternion.identity);
+                            playerDictionary[int.Parse(dividedClientPosition[0])] = otherPlayer;
+                        }
+                    }
+                    else
+                    {
+                        var dividedClientPosition = otherClients.Split('?');
+                        var otherPlayerPositions = dividedClientPosition[1].Split(':');
+                        var otherPlayerPosition = new Vector3(float.Parse(otherPlayerPositions[0]),
+                            float.Parse(otherPlayerPositions[1]), float.Parse(otherPlayerPositions[2]));
+                        
+                        positionDictionary[int.Parse(dividedClientPosition[0])] = otherPlayerPosition;
+                    }
+                    
+                }
+                
+                Id = Int32.Parse(newClientId);
+                _isConnected = true;
+            }
+
+            if (result.StartsWith("new:"))
+            {
+                var newId = result.Split(':')[1];
+                _newIdInt = int.Parse(newId);
+                _createNewPlayer = true;
+            }
+
+            if (result.StartsWith("pos="))
+            {
+                var parsedResult = result.Split('&');
+                var positions = parsedResult[1].Split('?')[1].Split(':');
+                var position = new Vector3(float.Parse(positions[0]), float.Parse(positions[1]),
+                    float.Parse(positions[2]));
+
+                var needToChangeId = int.Parse(parsedResult[0].Split('=')[1]);
+                _isChangedPosition = true;
+                _needToChangeId = needToChangeId;
+                _changedPositionKeyValue = new KeyValuePair<int, Vector3>(needToChangeId, position);
+            }
+
+            Debug.Log(result);
+            _udpClient.BeginReceive(ReceiveCallback, null);
+        }
+
+        public void SendHelloPackage()
+        {
+            var bytes = Encoding.ASCII.GetBytes("hello");
+            _udpClient.BeginSend(bytes, bytes.Length, SendCallback, null);
+            Debug.Log("Hellopackagesent");
+        }
+
+        public void Send(byte[] bytes)
+        {
+            _udpClient.BeginSend(bytes, bytes.Length, SendCallback, null);
+        }
+
+        private void SendCallback(IAsyncResult ar)
+        {
+            _udpClient.EndSend(ar);
+        }
     }
 }
