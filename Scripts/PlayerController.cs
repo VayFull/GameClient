@@ -7,6 +7,7 @@ namespace GameClient.Scripts
     {
         private CharacterController _characterController;
         private Communicator Communicator;
+        public GameObject GameMenu;
         void Start()
         {
             _characterController = GetComponent<CharacterController>();
@@ -41,6 +42,11 @@ namespace GameClient.Scripts
                 _characterController.Move(Vector3.right * 0.1f);
                 var currentPosition = transform.position;
                 SendCurrentPosition(currentPosition);
+            }
+
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                GameMenu.SetActive(!GameMenu.activeInHierarchy);
             }
         }
 

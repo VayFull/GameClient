@@ -11,7 +11,11 @@ namespace GameClient.Scripts
 
         public GameObject CommunicatorGameObject;
         private Communicator Communicator;
-    
+
+        public GameObject MainMenu;
+
+        public GameObject GameMenuGameObject;
+
         private void Start()
         {
             Communicator = CommunicatorGameObject.GetComponent<Communicator>();
@@ -26,6 +30,17 @@ namespace GameClient.Scripts
             var portValue = 12000;
 
             Communicator.JoinServer(hostnameValue, portValue);
+        }
+
+        public void Resume()
+        {
+            GameMenuGameObject.SetActive(false);
+        }
+
+        public void Disconnect()
+        {
+            Communicator.DisconnectFromServer();
+            MainMenu.SetActive(true);
         }
     }
 }

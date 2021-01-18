@@ -15,14 +15,17 @@ namespace GameClient.Scripts
         public GameObject Menu;
         public GameObject Player;
         public GameObject OtherPlayer;
+        private GameObject PlayerGameObject;
         private bool _isConnected = false;
         private bool _createNewPlayer = false;
         private bool _isChangedPosition = false;
+        private bool _needToDelete = false;
         private KeyValuePair<int, Vector3> _changedPositionKeyValue;
         private int _newIdInt = 0;
         private Dictionary<int, GameObject> playerDictionary = new Dictionary<int, GameObject>();
         private Dictionary<int, Vector3> positionDictionary = new Dictionary<int, Vector3>();
         private int _needToChangeId = 0;
+        private int _needToDeleteId = 0;
 
         void Start()
         {
@@ -33,10 +36,14 @@ namespace GameClient.Scripts
         {
             if (_isConnected)
             {
-                Debug.Log("ya dibigl!");
                 Menu.SetActive(false);
-                Instantiate(Player, new Vector3(0, 2, 0), Quaternion.identity);
+                PlayerGameObject = Instantiate(Player, new Vector3(0, 2, 0), Quaternion.identity);
+                
                 _isConnected = false;
+                var playerController = PlayerGameObject.GetComponent<PlayerController>();
+                playerController.GameMenu = GameObject.FindWithTag("GameMenu");
+                playerController.GameMenu.SetActive(false);
+                
 
                 foreach (var otherPlayer in positionDictionary)
                 {
@@ -60,6 +67,15 @@ namespace GameClient.Scripts
                 changedObject.transform.position = _changedPositionKeyValue.Value;
                 playerDictionary[_needToChangeId].transform.position = _changedPositionKeyValue.Value;
                 _isChangedPosition = false;
+            }
+
+            if (_needToDelete)
+            {
+                var playerToDelete = playerDictionary[_needToDeleteId];
+                Destroy(playerToDelete);
+                playerDictionary.Remove(_needToDeleteId);
+                _needToDeleteId = 0;
+                _needToDelete = false;
             }
         }
 
@@ -95,8 +111,7 @@ namespace GameClient.Scripts
                             var otherPlayerPositions = dividedClientPosition[1].Split(':');
                             var otherPlayerPosition = new Vector3(float.Parse(otherPlayerPositions[0]),
                                 float.Parse(otherPlayerPositions[1]), float.Parse(otherPlayerPositions[2]));
-                            var otherPlayer = Instantiate(OtherPlayer, otherPlayerPosition, Quaternion.identity);
-                            playerDictionary[int.Parse(dividedClientPosition[0])] = otherPlayer;
+                            positionDictionary[int.Parse(dividedClientPosition[0])] = otherPlayerPosition;
                         }
                     }
                     else
@@ -135,6 +150,13 @@ namespace GameClient.Scripts
                 _changedPositionKeyValue = new KeyValuePair<int, Vector3>(needToChangeId, position);
             }
 
+            if (result.StartsWith("disconnect:"))
+            {
+                var disconnectedId = int.Parse(result.Split(':')[1]);
+                _needToDeleteId = disconnectedId;
+                _needToDelete = true;
+            }
+
             Debug.Log(result);
             _udpClient.BeginReceive(ReceiveCallback, null);
         }
@@ -154,6 +176,18 @@ namespace GameClient.Scripts
         private void SendCallback(IAsyncResult ar)
         {
             _udpClient.EndSend(ar);
+        }
+
+        public void DisconnectFromServer()
+        {
+            var bytes = Encoding.ASCII.GetBytes($"disconnect:{Id}");
+            Send(bytes);
+            foreach (var otherPlayer in playerDictionary.Values)
+                Destroy(otherPlayer);
+            
+            playerDictionary.Clear();
+            positionDictionary.Clear();
+            Destroy(PlayerGameObject);
         }
     }
 }
