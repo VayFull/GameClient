@@ -1,5 +1,6 @@
 ﻿using System;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace GameClient.Scripts
@@ -10,26 +11,46 @@ namespace GameClient.Scripts
         public InputField PortInput;
 
         public GameObject CommunicatorGameObject;
-        private Communicator Communicator;
 
         public GameObject MainMenu;
 
         public GameObject GameMenuGameObject;
 
+        public Text ErrorMessageText;
+
         private void Start()
         {
-            Communicator = CommunicatorGameObject.GetComponent<Communicator>();
+            if (ErrorMessageText != null)
+                ErrorMessageText.text = String.IsNullOrEmpty(SceneData.ErrorMessage) 
+                    ? "Data" 
+                    : SceneData.ErrorMessage;
+
+            if (HostnameInput != null && PortInput != null)
+            {
+                if (!String.IsNullOrEmpty(SceneData.Hostname))
+                {
+                    HostnameInput.text = SceneData.Hostname;
+                }
+
+                if (SceneData.Port != 0)
+                {
+                    PortInput.text = SceneData.Port.ToString();
+                }
+            }
         }
 
         public void TryToConnect()
         {
-            /*var hostnameValue = HostnameInput.text;
-            var portValue = Int32.Parse(PortInput.text);*/
-            
-            var hostnameValue = "127.0.0.1";
-            var portValue = 12000;
+            var hostnameValue = HostnameInput.text;
+            var portValue = Int32.Parse(PortInput.text);
 
-            Communicator.JoinServer(hostnameValue, portValue);
+            /*var hostnameValue = "127.0.0.1";
+            var portValue = 12000;*/
+
+            SceneData.Hostname = hostnameValue;
+            SceneData.Port = portValue;
+
+            SceneManager.LoadScene("Game");
         }
 
         public void Resume()
@@ -39,8 +60,8 @@ namespace GameClient.Scripts
 
         public void Disconnect()
         {
-            Communicator.DisconnectFromServer();
-            MainMenu.SetActive(true);
+            var communicator = CommunicatorGameObject.GetComponent<Communicator>();
+            communicator.DisconnectFromServer();
         }
     }
 }
